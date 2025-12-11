@@ -57,6 +57,16 @@ export default function App() {
     setError(null);
     setAudioUrl(null);
 
+    // Add delay to mimic AI response
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Check if request was cancelled during delay
+    if (controller.signal.aborted) {
+      setStatusMessage('Request cancelled');
+      setIsGenerating(false);
+      return;
+    }
+
     try {
       const result = await streamMockPodcastFromLocation(location, {
         signal: controller.signal,
