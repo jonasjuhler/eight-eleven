@@ -262,3 +262,38 @@ function writeString(view: DataView, offset: number, str: string) {
     view.setUint8(offset + i, str.charCodeAt(i));
   }
 }
+
+const N8N_WEBHOOK_URL =
+  import.meta.env.VITE_N8N_WEBHOOK_URL ?? '';
+
+export async function triggerN8nWorkflow(
+  location: LocationPayload,
+  options: StreamOptions = {}
+): Promise<void> {
+  if (!N8N_WEBHOOK_URL) {
+    throw new Error('N8N webhook URL is not configured');
+  }
+
+  const payload = {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    accuracy: location.accuracy,
+    timestamp: location.timestamp ?? Date.now(),
+    source: location.source,
+  };
+
+  options.onStatus?.('connecting');
+
+  const response = await fetch(N8N_WEBHOOK_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Webhook returned ${response.status}`);
+  }
+}

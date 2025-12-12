@@ -8,6 +8,8 @@ interface PodcastPlayerProps {
   statusMessage?: string | null;
   onGenerate: () => void;
   onCancel?: () => void;
+  onTriggerWorkflow?: () => void;
+  isTriggeringWorkflow?: boolean;
 }
 
 export function PodcastPlayer({
@@ -16,6 +18,8 @@ export function PodcastPlayer({
   statusMessage,
   onGenerate,
   onCancel,
+  onTriggerWorkflow,
+  isTriggeringWorkflow = false,
 }: PodcastPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -80,58 +84,60 @@ export function PodcastPlayer({
   return (
     <div className="border-t-2 border-gray-200 pt-12 mt-12">
       <div className="max-w-3xl mx-auto space-y-8">
-        <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-sm bg-gray-100 px-3 py-1 text-gray-600">
-              <Waves className="h-4 w-4" />
-              <span>ElevenLabs stream via n8n</span>
+        {onTriggerWorkflow && (
+          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-sm bg-gray-100 px-3 py-1 text-gray-600">
+                <Waves className="h-4 w-4" />
+                <span>ElevenLabs stream via n8n</span>
+              </div>
+              <h2 className="text-gray-900">Generate a podcast about these places</h2>
+              <p className="text-gray-600 max-w-xl">
+                We'll send your coordinates to the agent, pull nearby points of interest with
+                Google Places, then stream back a short audio story.
+              </p>
             </div>
-            <h2 className="text-gray-900">Generate a podcast about these places</h2>
-            <p className="text-gray-600 max-w-xl">
-              We’ll send your coordinates to the agent, pull nearby points of interest with
-              Google Places, then stream back a short audio story.
-            </p>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap justify-end">
-            {onCancel && isGenerating && (
-              <Button variant="outline" onClick={onCancel} className="border-2 border-gray-300">
-                <Square className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
-            )}
-            <Button
-              onClick={onGenerate}
-              disabled={isGenerating}
-              className="bg-gray-900 text-white hover:bg-gray-800 px-5"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating…
-                </>
-              ) : audioUrl ? (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Regenerate
-                </>
-              ) : (
-                <>
-                  <Waves className="mr-2 h-4 w-4" />
-                  Generate podcast
-                </>
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              {onCancel && isTriggeringWorkflow && (
+                <Button variant="outline" onClick={onCancel} className="border-2 border-gray-300">
+                  <Square className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
               )}
-            </Button>
-            <a
-              href="https://elevenlabs.io/app/talk-to?agent_id=agent_7101kc7fq7c0eth96bycxvqasd3a&branch_id=agtbrch_0901kc7fq8zwfbab9v7fm1qpgbp6"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Button variant="outline" className="border-2 border-gray-300">
-                Ask the agent
+              <Button
+                onClick={onTriggerWorkflow}
+                disabled={isTriggeringWorkflow}
+                className="bg-gray-900 text-white hover:bg-gray-800 px-5"
+              >
+                {isTriggeringWorkflow ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generating…
+                  </>
+                ) : audioUrl ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Regenerate
+                  </>
+                ) : (
+                  <>
+                    <Waves className="mr-2 h-4 w-4" />
+                    Generate podcast
+                  </>
+                )}
               </Button>
-            </a>
+              <a
+                href="https://elevenlabs.io/app/talk-to?agent_id=agent_7101kc7fq7c0eth96bycxvqasd3a&branch_id=agtbrch_0901kc7fq8zwfbab9v7fm1qpgbp6"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Button variant="outline" className="border-2 border-gray-300">
+                  Ask the agent
+                </Button>
+              </a>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="rounded-sm border-2 border-gray-200 p-6 bg-white space-y-4">
           <div className="flex items-center justify-between">
@@ -170,7 +176,7 @@ export function PodcastPlayer({
           <div className="flex items-center gap-3">
             <Button
               onClick={togglePlayback}
-              disabled={!audioUrl || isGenerating}
+              disabled={!audioUrl || isTriggeringWorkflow}
               className="bg-gray-900 text-white hover:bg-gray-800 px-6"
             >
               {isPlaying ? (

@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { LocationDetector } from './components/LocationDetector';
-import { PlacesList } from './components/PlacesList';
-import { Logo } from './components/Logo';
-import { PodcastPlayer } from './components/PodcastPlayer';
-import { streamMockPodcastFromLocation } from './lib/api';
-import { PointOfInterest, LocationPayload } from './types';
-import { mockPlacesData } from './utils/mockData';
-import { AlertTriangle } from 'lucide-react';
+import { useEffect, useRef, useState } from "react";
+import { LocationDetector } from "./components/LocationDetector";
+import { PlacesList } from "./components/PlacesList";
+import { Logo } from "./components/Logo";
+import { PodcastPlayer } from "./components/PodcastPlayer";
+import { streamMockPodcastFromLocation, triggerN8nWorkflow } from "./lib/api";
+import { PointOfInterest, LocationPayload } from "./types";
+import { mockPlacesData } from "./utils/mockData";
+import { AlertTriangle } from "lucide-react";
 
 export default function App() {
   const [location, setLocation] = useState<LocationPayload | null>(null);
@@ -14,20 +14,26 @@ export default function App() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isTriggeringWorkflow, setIsTriggeringWorkflow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  const workflowControllerRef = useRef<AbortController | null>(null);
   const previousAudioUrlRef = useRef<string | null>(null);
   const statusCopy: Record<string, string> = {
-    connecting: 'Connecting to n8n agent…',
-    'receiving-events': 'Receiving points of interest…',
-    'streaming-audio': 'Streaming ElevenLabs audio…',
-    'fallback-local': 'Using a local fallback clip',
+    connecting: "Connecting to n8n agent…",
+    "receiving-events": "Receiving points of interest…",
+    "streaming-audio": "Streaming ElevenLabs audio…",
+    "fallback-local": "Using a local fallback clip",
   };
 
   useEffect(() => {
     return () => {
       controllerRef.current?.abort();
-      if (previousAudioUrlRef.current && previousAudioUrlRef.current.startsWith('blob:')) {
+      workflowControllerRef.current?.abort();
+      if (
+        previousAudioUrlRef.current &&
+        previousAudioUrlRef.current.startsWith("blob:")
+      ) {
         URL.revokeObjectURL(previousAudioUrlRef.current);
       }
     };
@@ -53,16 +59,16 @@ export default function App() {
     controllerRef.current = controller;
 
     setIsGenerating(true);
-    setStatusMessage('Connecting to agent…');
+    setStatusMessage("Connecting to agent…");
     setError(null);
     setAudioUrl(null);
 
     // Add delay to mimic AI response
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
     // Check if request was cancelled during delay
     if (controller.signal.aborted) {
-      setStatusMessage('Request cancelled');
+      setStatusMessage("Request cancelled");
       setIsGenerating(false);
       return;
     }
@@ -79,7 +85,10 @@ export default function App() {
         onStatus: handleStatusUpdate,
       });
 
-      if (previousAudioUrlRef.current && previousAudioUrlRef.current.startsWith('blob:')) {
+      if (
+        previousAudioUrlRef.current &&
+        previousAudioUrlRef.current.startsWith("blob:")
+      ) {
         URL.revokeObjectURL(previousAudioUrlRef.current);
       }
 
@@ -87,18 +96,18 @@ export default function App() {
       setAudioUrl(result.audioUrl);
       setPlaces(result.pois);
       setStatusMessage(
-        result.source === 'fallback'
-          ? 'Using a local fallback clip while the agent is offline.'
-          : result.source === 'mock'
-            ? 'Ready to play (mock audio response).'
-            : 'Ready to play'
+        result.source === "fallback"
+          ? "Using a local fallback clip while the agent is offline."
+          : result.source === "mock"
+          ? "Ready to play (mock audio response)."
+          : "Ready to play"
       );
     } catch (err) {
       if (controller.signal.aborted) {
-        setStatusMessage('Request cancelled');
+        setStatusMessage("Request cancelled");
         return;
       }
-      setError('Unable to generate the podcast right now. Please try again.');
+      setError("Unable to generate the podcast right now. Please try again.");
     } finally {
       setIsGenerating(false);
     }
@@ -106,8 +115,38 @@ export default function App() {
 
   const handleCancel = () => {
     controllerRef.current?.abort();
+    workflowControllerRef.current?.abort();
     setIsGenerating(false);
-    setStatusMessage('Request cancelled');
+    setIsTriggeringWorkflow(false);
+    setStatusMessage("Request cancelled");
+  };
+
+  const handleTriggerWorkflow = async () => {
+    if (!location) return;
+
+    workflowControllerRef.current?.abort();
+    const controller = new AbortController();
+    workflowControllerRef.current = controller;
+
+    setIsTriggeringWorkflow(true);
+    setStatusMessage("Generating podcast…");
+    setError(null);
+
+    try {
+      await triggerN8nWorkflow(location, {
+        signal: controller.signal,
+        onStatus: handleStatusUpdate,
+      });
+      setStatusMessage("Podcast generated successfully");
+    } catch (err) {
+      if (controller.signal.aborted) {
+        setStatusMessage("Request cancelled");
+        return;
+      }
+      setError("Unable to trigger the workflow right now. Please try again.");
+    } finally {
+      setIsTriggeringWorkflow(false);
+    }
   };
 
   return (
@@ -126,7 +165,10 @@ export default function App() {
                   onClick={() => {
                     setLocation(null);
                     setPlaces([]);
-                    if (previousAudioUrlRef.current && previousAudioUrlRef.current.startsWith('blob:')) {
+                    if (
+                      previousAudioUrlRef.current &&
+                      previousAudioUrlRef.current.startsWith("blob:")
+                    ) {
                       URL.revokeObjectURL(previousAudioUrlRef.current);
                     }
                     previousAudioUrlRef.current = null;
@@ -152,10 +194,12 @@ export default function App() {
                 <Logo showText={false} />
               </div>
               <div className="space-y-6">
-                <h2 className="text-gray-900">Audio guide for your surroundings</h2>
+                <h2 className="text-gray-900">
+                  Audio guide for your surroundings
+                </h2>
                 <p className="text-gray-600 max-w-lg mx-auto">
-                  Share your location and we’ll stream a mini-podcast about the closest
-                  points of interest.
+                  Share your location and we’ll stream a mini-podcast about the
+                  closest points of interest.
                 </p>
               </div>
               <LocationDetector onLocationDetected={handleLocationDetected} />
@@ -166,19 +210,25 @@ export default function App() {
                     <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center">
                       1
                     </span>
-                    <p className="text-gray-600">Click to share your location</p>
+                    <p className="text-gray-600">
+                      Click to share your location
+                    </p>
                   </div>
                   <div className="flex gap-3">
                     <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center">
                       2
                     </span>
-                    <p className="text-gray-600">We find nearby points of interest</p>
+                    <p className="text-gray-600">
+                      We find nearby points of interest
+                    </p>
                   </div>
                   <div className="flex gap-3">
                     <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center">
                       3
                     </span>
-                    <p className="text-gray-600">Stream a short podcast about them</p>
+                    <p className="text-gray-600">
+                      Stream a short podcast about them
+                    </p>
                   </div>
                 </div>
               </div>
@@ -198,7 +248,8 @@ export default function App() {
 
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <span className="px-3 py-1.5 rounded-sm bg-gray-100 border border-gray-200 text-gray-700 font-mono">
-                Lat {location.latitude.toFixed(4)}, Lng {location.longitude.toFixed(4)}
+                Lat {location.latitude.toFixed(4)}, Lng{" "}
+                {location.longitude.toFixed(4)}
               </span>
               {location.accuracy && (
                 <span className="px-3 py-1.5 rounded-sm bg-green-50 border border-green-200 text-green-700">
@@ -206,7 +257,10 @@ export default function App() {
                 </span>
               )}
               <span className="px-3 py-1.5 rounded-sm bg-gray-100 border border-gray-200 text-gray-600">
-                Captured {new Date(location.timestamp ?? Date.now()).toLocaleTimeString()}
+                Captured{" "}
+                {new Date(
+                  location.timestamp ?? Date.now()
+                ).toLocaleTimeString()}
               </span>
             </div>
 
@@ -218,6 +272,8 @@ export default function App() {
               statusMessage={statusMessage}
               onGenerate={handleGeneratePodcast}
               onCancel={handleCancel}
+              onTriggerWorkflow={handleTriggerWorkflow}
+              isTriggeringWorkflow={isTriggeringWorkflow}
             />
           </div>
         )}
